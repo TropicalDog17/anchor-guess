@@ -130,6 +130,7 @@ describe("anchor-guess", () => {
       { notInWord: {} },
       { notInWord: {} },
     ]);
+    expect(gameState.state).to.eql({ active: {} });
   });
   it("guess correct", async () => {
     const gameKeypair = anchor.web3.Keypair.generate();
@@ -154,5 +155,37 @@ describe("anchor-guess", () => {
       { inCorrectPosition: {} },
       { inCorrectPosition: {} },
     ]);
+    expect(gameState.state).to.eql({ won: {} });
+  });
+  it("guess out of turn", async () => {
+    const gameKeypair = anchor.web3.Keypair.generate();
+    const player = (program.provider as anchor.AnchorProvider).wallet;
+    const tester = anchor.web3.Keypair.generate();
+    await program.methods
+      .setupGame()
+      .accounts({
+        game: gameKeypair.publicKey,
+        player: player.publicKey,
+      })
+      .signers([gameKeypair])
+      .rpc();
+    await mutateSecretRPC(program, gameKeypair, tester, "penta");
+    //guess incorrectly 6 times different words
+    await guessRPC(program, gameKeypair, player, "fdsls");
+    await guessRPC(program, gameKeypair, player, "ablcd");
+    await guessRPC(program, gameKeypair, player, "ruiew");
+    await guessRPC(program, gameKeypair, player, "troeu");
+    await guessRPC(program, gameKeypair, player, "fdslj");
+    await guessRPC(program, gameKeypair, player, "peerw");
+    let gameState = await program.account.game.fetch(gameKeypair.publicKey);
+    expect(gameState.moveCount).to.equal(6);
+    expect(gameState.guessState).to.eql([
+      { inCorrectPosition: {} },
+      { inCorrectPosition: {} },
+      { inWordButWrongSpot: {} },
+      { notInWord: {} },
+      { notInWord: {} },
+    ]);
+    expect(gameState.state).to.eql({ loss: {} });
   });
 });
