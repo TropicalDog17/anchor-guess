@@ -9,11 +9,18 @@ pub mod anchor_guess {
     use super::*;
 
     pub fn setup_game(ctx: Context<SetupGame>) -> Result<()> {
-        ctx.accounts.game.start(ctx.accounts.player.key())
+        ctx.accounts.game.setup_game(ctx.accounts.player.key())
     }
     pub fn guess(ctx: Context<Play>, word: String) -> Result<()> {
         let game = &mut ctx.accounts.game;
         game.guess(&word)
+    }
+    // TODO: find another way to test
+    pub fn mutate_secret(ctx: Context<MutateSecret>, new_secret: String) -> Result<()> {
+        require_neq!(ctx.accounts.game.player.key(), ctx.accounts.tester.key(), AnchorGuessError::ProhibitedAction);
+        let game = &mut ctx.accounts.game;
+        game.secret = new_secret;
+        Ok(())
     }
 }
 
@@ -47,9 +54,15 @@ pub struct Play<'info> {
     pub game: Account<'info, Game>,
     pub player: Signer<'info>,
 }
+#[derive(Accounts)]
+pub struct MutateSecret<'info> {
+    #[account(mut)]
+    pub game: Account<'info, Game>,
+    pub tester: Signer<'info>,
+}
 impl Game {
     pub const MAXIMUM_SIZE: usize = 32 + 1 + 1 + 24;
-    pub fn start(&mut self, player: Pubkey) -> Result<()> {
+    pub fn setup_game(&mut self, player: Pubkey) -> Result<()> {
         // TODO: fix move_count logic, because default move_count is 0, the start may be evoked multiple times before moves are performed by player
         require_eq!(self.move_count, 0, AnchorGuessError::GameAlreadyStarted);
         self.player = player;
@@ -70,22 +83,22 @@ impl Game {
     fn is_active(&self) -> bool {
         self.state == GameState::Active
     }
-    fn is_letter_in_word(&self, word: &str, letter: &char) -> bool {
-        word.contains(*letter)
+    fn is_letter_in_secret(&self, secret: &str, letter: &char) -> bool {
+        secret.contains(*letter)
     }
-    fn is_letter_in_correct_position(&self, word: &str, letter: &char, index: usize) -> bool {
-        word.to_string().get(index..index + 1).unwrap() == letter.to_string()
+    fn is_letter_in_correct_position(&self, secret: &str, letter: &char, index: usize) -> bool {
+        secret.chars().nth(index).unwrap() == *letter
     }
     pub fn guess(&mut self, word: &str) -> Result<()> {
         require!(self.is_active(), AnchorGuessError::OutOfMove);
         require!(word.len() == 5, AnchorGuessError::InvalidWordLength);
 
         // Reset guess_state for a new guess
-
+        self.guess_state = Vec::new();
         for (index, letter) in word.chars().enumerate() {
-            if self.is_letter_in_correct_position(word, &letter, index) {
+            if self.is_letter_in_correct_position(&self.secret, &letter, index) {
                 self.guess_state.push(LetterGuessed::InCorrectPosition)
-            } else if self.is_letter_in_word(word, &letter) {
+            } else if self.is_letter_in_secret(&self.secret, &letter) {
                 self.guess_state.push(LetterGuessed::InWordButWrongSpot)
             } else {
                 self.guess_state.push(LetterGuessed::NotInWord)
@@ -108,6 +121,7 @@ pub enum AnchorGuessError {
     OverflowError,
     InvalidWordLength,
     OutOfMove,
+    ProhibitedAction,
 }
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
 pub enum LetterGuessed {
