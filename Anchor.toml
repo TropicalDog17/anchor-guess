@@ -8,7 +8,7 @@ anchor_guess = "6vWgxZqyG7eMN4HUGzKepGLxNjQNhFSPxznTB7a5AfnP"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
+cluster = "localnet"
 wallet = "/home/tropicaldog17/.config/solana/id.json"
 
 [scripts]
